@@ -15,7 +15,7 @@ The steps to create the sinusoidal position embedding are:
 
 3. Calculate Frequencies: Create a range of indices i from 0 to D/2−1. The inverse frequencies are calculated by applying the exponential function to these indices, scaled by $-β$:
 
-$${inv\_freq}_i ​= e^{−i · β}$$
+$$\text{inv\\_freq}_i ​= e^{−i · β}$$
 
 This results in a vector of shape $[D/2]$.
 
@@ -25,7 +25,7 @@ Broadcast: The time tensor (shape [B]) is expanded to [B, 1]. The inv_freq vecto
 
 Multiplication: An element-wise multiplication (an outer product) is performed, creating a tensor of shape [B, D/2]. Each time step in the batch is now scaled by all the pre-defined frequencies.
 
-$${scaled\_time}_{b,i}​ = t_b​ ⋅ {inv\_freq}_i​$$
+$$\text{scaled\\_time}_{b,i}​ = t_b​ ⋅ \text{inv\\_freq}_i​$$
 
 Code Line: embeddings = time[:, None] * embeddings[None, :]
 
@@ -33,9 +33,9 @@ Code Line: embeddings = time[:, None] * embeddings[None, :]
 
 Sine and Cosine: Apply the sin(⋅) function to the first half of the dimensions and the cos(⋅) function to the second half (or simply apply both to all dimensions, as done here).
 
-$${sin\_emb}=sin({scaled\_time})$$
+$$\text{sin\\_emb}=sin(\text{scaled\\_time})$$
 
-$${cos\_emb}=cos({scaled\_time})$$
+$$\text{cos\\_emb}=cos(\text{scaled\\_time})$$
 
 - Concatenate the sine and cosine results along the last dimension.
 
