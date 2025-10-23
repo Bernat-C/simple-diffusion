@@ -3,16 +3,23 @@ import matplotlib.pyplot as plt
 from model import SimpleUnet
 from torchvision.utils import save_image
 from pathlib import Path
+from config import load_config_yaml
 
+config = load_config_yaml("../conf/config1.yaml")
+    
 # --- Generation settings ---
-IMG_SIZE = 32
-N_SAMPLES = 10
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH = Path("models") / "mnist_conditional.pth"
+IMG_SIZE = config['generation']['image_size']
+N_SAMPLES = config['generation']['num_samples_per_class']
+DEVICE = config["generation"]["auto"] if config["generation"]["auto"] != "auto" else "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_PATH = config['generation']['model_path']
+OUTPUT_PATH = config['generation']['generation_output_dir']
 
 # --- Diffusion settings (must match training) ---
-T = 1000
-betas = torch.linspace(1e-4, 0.02, T)
+T = config['diffusion']['timesteps']
+beta_min = config['diffusion']['beta_start']
+beta_max = config['diffusion']['beta_end']
+betas = torch.linspace(beta_min, beta_max, T)
+
 alphas = 1. - betas
 alphas_cumprod = torch.cumprod(alphas, axis=0)
 alphas_cumprod_prev = torch.cat([torch.tensor([1.0]), alphas_cumprod[:-1]])
@@ -66,7 +73,7 @@ def generate(i):
 
     # Combine images into a grid
     all_images = torch.cat(generated_images)
-    save_image(all_images, Path("output") / f"mnist_digits_{i:00}.png", nrow=N_SAMPLES)
+    save_image(all_images, Path(OUTPUT_PATH) / f"mnist_digits_{i:00}.png", nrow=N_SAMPLES)
     print("Generated digits saved as mnist_digits.png")
 
 if __name__ == "__main__":

@@ -7,16 +7,24 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 from model import SimpleUnet
+from config import load_config_yaml
+
+config = load_config_yaml("../conf/config1.yaml")
 
 # --- Hyperparameters ---
-IMG_SIZE = 32 # MNIST is 28x28, but we'll pad to 32x32 for convenience
-BATCH_SIZE = 128
-EPOCHS = 20
-LEARNING_RATE = 1e-3
+IMG_SIZE = config["general"]["image_size"]
+BATCH_SIZE = config["training"]["batch_size"]
+EPOCHS = config["training"]["num_epochs"]
+DEVICE = config["generation"]["auto"] if config["generation"]["auto"] != "auto" else "cuda" if torch.cuda.is_available() else "cpu"
+LEARNING_RATE = config["training"]["learning_rate"]
+MODEL_PATH = config['generation']['model_path']
 
 # --- Diffusion settings ---
-T = 1000 # Number of timesteps
-betas = torch.linspace(1e-4, 0.02, T)
+T = config['diffusion']['timesteps']
+beta_min = config['diffusion']['beta_start']
+beta_max = config['diffusion']['beta_end']
+betas = torch.linspace(beta_min, beta_max, T)
+
 alphas = 1. - betas
 alphas_cumprod = torch.cumprod(alphas, axis=0)
 
@@ -37,7 +45,7 @@ def forward_diffusion_sample(x_0, t, device="cpu"):
         + sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device), noise.to(device)
 
 def train():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = DEVICE
     print(f"Using device: {device}")
 
     # --- Data Loading ---
@@ -73,8 +81,8 @@ def train():
             pbar.set_description(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
 
     # --- Save Model ---
-    torch.save(model.state_dict(), "mnist_conditional.pth")
-    print("Model saved as mnist_conditional.pth")
+    torch.save(model.state_dict(), MODEL_PATH)
+    print(f"Model saved as {MODEL_PATH}")
 
 if __name__ == '__main__':
     train()
