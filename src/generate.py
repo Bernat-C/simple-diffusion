@@ -28,6 +28,7 @@ posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
 @torch.no_grad()
 def p_sample(model, x, t, t_index, y):
     # Get model prediction
+    # To multiply, we need the tensors to be [BatchSize, Channels, Height, Width]
     betas_t = betas[t_index].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(DEVICE)
     sqrt_one_minus_alphas_cumprod_t = torch.sqrt(1. - alphas_cumprod[t_index]).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(DEVICE)
     sqrt_recip_alphas_t = torch.sqrt(1.0 / alphas[t_index]).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(DEVICE)
@@ -63,8 +64,6 @@ def generate(i):
     model.to(DEVICE)
     model.eval()
 
-    # --- Generate a grid of all digits (0-9) ---
-    num_classes = 10
     generated_images = []
     print(f"Generating digit {i}...")
     label = torch.tensor([i] * N_SAMPLES, device=DEVICE) # Generate N_SAMPLES of each digit

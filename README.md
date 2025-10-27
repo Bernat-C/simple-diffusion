@@ -1,53 +1,80 @@
 # simple-diffusion
-Conditional diffusion models to generate MNIST characters.
+Diffusion project to learn the basics of conditional generation of images.
 
 We are using a U-Net with Sinusoidal Position Embeddings defining the timestep in the diffusion process.
 
 ### The Sinusoidal Position Embedding: ###
 
-Maps the scalar t to a high-dimensional vector, giving the network richer information. This ensures continuity and a consistent meaning across different numbers of total timesteps. This helps the network learn the smooth transition from one noise level to the next.
+The sinusoidal position embedding converts a scalar value $t$ (e.g., a timestep) into a high-dimensional vector. This provides the network with a rich, continuous representation of $t$, helping it understand the relationship between adjacent steps and learn smooth transitions.
 
-The steps to create the sinusoidal position embedding are:
+1. <b>Define Dimensions</b>: Set the total embedding dimension $D$ and the half-dimension $d= D / 2$.
 
-1. We determine the full embedding dimension D, and half embedding dimension (D/2), as we will concat sin and cos.
+2. <b>Calculate Frequency Divisor ($\beta$)</b>: Calculate the scaling factor $\beta$ based on the half-dimension d.
+   
+$$\beta = \frac{log(10000)}{d−1​}$$
 
-2. $$\beta = \frac{log(10000)}{D/2−1​}$$
+3. <b>Calculate Frequencies</b>: Create a vector of $d$ inverse frequencies. The $i$-th frequency (for $i$ from 0 to $d$−1) is:
 
-3. Calculate Frequencies: Create a range of indices i from 0 to D/2−1. The inverse frequencies are calculated by applying the exponential function to these indices, scaled by $-β$:
+$$inv\_freq_i ​= e^{−i · β}$$
 
-$$\text{inv\\_freq}_i ​= e^{−i · β}$$
+4. <b>Scale Timesteps</b>: Multiply each timestep $t$ in the batch (shape [$B$]) by the inverse frequency vector (shape [$d$]). This broadcasted operation creates a scaledtime tensor of shape [$B$,$d$].
 
-This results in a vector of shape $[D/2]$.
+$$scaled\_time_{b,i}​ = t_b​ ⋅ inv\_freq_i​$$
 
-1. The time value t is now multiplied by each of the inverse frequencies calculated in Step 2. This creates the "scaled time" tensor.
+5. <b>Apply Sine and Cosine</b>: Apply sin and cos functions element-wise to the scaled_time tensor.
 
-Broadcast: The time tensor (shape [B]) is expanded to [B, 1]. The inv_freq vector (shape [D/2]) is expanded to [1, D/2].
+$$sin\_emb=sin(scaled\_time)$$
 
-Multiplication: An element-wise multiplication (an outer product) is performed, creating a tensor of shape [B, D/2]. Each time step in the batch is now scaled by all the pre-defined frequencies.
+$$cos\_emb=cos(scaled\_time)$$
 
-$$\text{scaled\\_time}_{b,i}​ = t_b​ ⋅ \text{inv\\_freq}_i​$$
+6. <b>Concatenate</b>: Combine the sine and cosine tensors along the last dimension.
 
-Code Line: embeddings = time[:, None] * embeddings[None, :]
+The final output is a tensor of shape [$B$, $D$]. Each row in this tensor is the high-dimensional vector embedding for the corresponding scalar timestep $t$ that was in the input batch.
 
-5. he core of the sinusoidal encoding involves applying sine and cosine functions to the scaled time values.
-
-Sine and Cosine: Apply the sin(⋅) function to the first half of the dimensions and the cos(⋅) function to the second half (or simply apply both to all dimensions, as done here).
-
-$$\text{sin\\_emb}=sin(\text{scaled\\_time})$$
-
-$$\text{cos\\_emb}=cos(\text{scaled\\_time})$$
-
-- Concatenate the sine and cosine results along the last dimension.
-
-Code Line: embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-
-Output: A tensor of shape [BatchSize, D]
 
 ### Training Process ###
 
-1. Pick a random timestep $t$.
-2. Generate pure noise $\epsilon$.
-3. Use a formula to create a noisy image $x_t$​ for that timestep by mixing the original image $x_0$​ and the noise $\epsilon$.
-4. Feed the noisy image $x_t$​, the timestep $t$, and the label $y$ to our U-Net.
-5. The U-Net will predict some noise.
-6. The loss is how different the U-Net's predicted noise is from the actual noise $\epsilon$ we added in step 2. We use Mean Squared Error (MSE) for this.
+For each image $x_0$​ in a batch, the model learns by performing the following steps:
+
+1. Sample Timestep & Noise:
+
+   - Pick a random timestep $t$ from the diffusion schedule (e.g., $t\in[1,T]$).
+   - Generate a $GT$ noise sample $\epsilon$ from a standard normal distribution, with the same size as the original image.
+
+2. Create Noisy Image (Forward Process):
+
+   - Create the noisy image $x_t$​ by directly "diffusing" the original image $x_0$​ to timestep $t$. $\alpha_t$ is the variance schedule, making $\sqrt{\bar \alpha_t}$ the signal rate (how much of the original we want to keep).
+    - They are mixed using $x_t = \sqrt{\bar \alpha_t} x_0 + \sqrt{1 - \bar \alpha_t} \epsilon$. 
+
+3. Predict Noise (Reverse Process):
+
+   - Feed the noisy image $x_t$​, the timestep $t$ (using its sinusoidal embedding), and the conditioning (class label $y$) into the U-Net model.
+   - The model's goal is to predict the original noise that was added ($\epsilon_\theta$).
+
+4. Calculate Loss:
+
+   - Compute the difference between the actual noise $\epsilon$ (from step 1) and the predicted noise $\epsilon_\theta$​ (from step 3).
+   - The loss is the Mean Squared Error (MSE): $L=MSE(\epsilon,\epsilon_\theta​)$.
+
+The model's weights are then updated, teaching the U-Net to predict the noise added at any given timestep.
+
+### Generation Process ###
+
+We generate $x_T$ images by sampling from a standard gaussian distribution. and start iterating backwards from $T$ to $0$
+1. Feed the noisy image $x_t$ to the model to obtain predicted noise $\epsilon_\theta$.
+2. Calculate the mean of the posterior distribution. 
+   - $\beta_t$ are a set of $T$ small constrants typically increasing linearly.
+   - Alpha schedule: $\alpha_t​=1−\beta_t$. 
+   - $\bar \alpha_t$ is the cumulative product of $\alpha$ up to $t$.
+
+$$\mu_\theta(x_t,t) = \frac{1}{\sqrt \alpha_t}(x_t-\frac{\beta_t}{\sqrt{1-\bar \alpha_t}}\epsilon_\theta(x_t,t,y))$$
+
+3. If $t>0$ add small amount of noise $z \sim \mathcal{N}(0,I)$ for stochasticity 
+   - $x_{t-1} = \mu_\theta(x_t,t) + \sigma_t z$
+   - Variance of the true posterior distribution: $\sigma_t = \sqrt{\frac{1-\bar \alpha_{t-1}}{1- \bar \alpha_t}*\beta_t}$
+   - The variance of the posterior distribution is derived from the bayes theorem. Because our posterior distributions are gaussians, the following equation can be used to derive the above formula.
+
+$$ q(x_{t-1}|x_t,x_0) = \frac{q(x_t|x_{t-1},x_0)*q(x_{t-1}|x_0)}{q(x_t|x_0)} $$
+
+
+4. Finally we rescale the output $x_{t-1}$ from $[-1,1]$ to $[0,1]$.

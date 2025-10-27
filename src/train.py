@@ -11,7 +11,7 @@ from config import load_config_yaml
 
 config = load_config_yaml("../conf/config1.yaml")
 
-# --- Hyperparameters ---
+# --- HYPERPARAMETERS ---
 IMG_SIZE = config["general"]["image_size"]
 BATCH_SIZE = config["training"]["batch_size"]
 EPOCHS = config["training"]["num_epochs"]
